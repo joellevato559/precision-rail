@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Precision Rail Group — Driver</title>
+  <style>
+    :root {
+      --bg: #0f172a; --card: #1e293b; --border: #334155; --text: #f1f5f9;
+      --muted: #94a3b8; --accent: #38bdf8; --ok: #22c55e; --warn: #f59e0b; --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100dvh;
+    }
+    .wrap { max-width: 430px; margin: 0 auto; padding: 16px 16px 88px; }
+    h1 { font-size: 1.25rem; margin: 0 0 4px; }
+    h2 { font-size: 0.95rem; margin: 0 0 10px; color: var(--accent); }
+    .muted { color: var(--muted); font-size: 0.8rem; }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px; margin-bottom: 12px;
+    }
+    label { display: block; font-size: 0.75rem; color: var(--muted); margin: 8px 0 4px; }
+    input, select {
+      width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+      background: #0f172a; color: var(--text); font-size: 1rem;
+    }
+    .btn {
+      display: block; width: 100%; padding: 12px; border: none; border-radius: 10px;
+      font-weight: 600; font-size: 0.95rem; cursor: pointer; margin-top: 8px;
+    }
+    .btn-primary { background: var(--accent); color: #0f172a; }
+    .btn-drive { background: #0d9488; color: #fff; }
+    .btn-end { background: #334155; color: var(--text); }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .row { display: flex; justify-content: space-between; gap: 8px; font-size: 0.85rem; padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .row:last-child { border-bottom: none; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .hos-btn {
+      padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--text); font-size: 0.75rem; font-weight: 600; cursor: pointer;
+    }
+    .hos-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(56,189,248,0.12); }
+    .banner { padding: 10px; border-radius: 8px; font-size: 0.8rem; margin-bottom: 10px; }
+    .banner.warn { background: rgba(245,158,11,0.15); color: var(--warn); }
+    .banner.err { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .banner.ok { background: rgba(34,197,94,0.12); color: var(--ok); }
+    .hidden { display: none !important; }
+    .nav {
+      position: fixed; bottom: 0; left: 0; right: 0; background: #1e293b;
+      border-top: 1px solid var(--border); display: flex; max-width: 430px; margin: 0 auto;
+    }
+    .nav button {
+      flex: 1; padding: 12px 4px; background: none; border: none; color: var(--muted);
+      font-size: 0.7rem; cursor: pointer;
+    }
+    .nav button.active { color: var(--accent); }
+    .inspect-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.8rem; border-bottom: 1px solid var(--border); }
+    .inspect-item select { width: 110px; padding: 6px; font-size: 0.75rem; }
+    #apiBase { font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- LOGIN -->
+    <section id="view-login">
+      <div style="text-align:center;margin-bottom:8px;">
+        <img src="prg-logo.jpg" alt="Precision Rail Group" style="max-width:220px;width:70%;height:auto;border-radius:8px;" />
+      </div>
+      <h1 style="text-align:center;">Time &amp; Mileage</h1>
+      <p class="muted" style="text-align:center;">Driver app · Precision Rail Group</p>
+      <div class="card" style="margin-top:16px;">
+        <label>API base URL</label>
+        <input id="apiBase" value="http://localhost:8080/api/v1" />
+        <label>Email</label>
+        <input id="email" type="email" value="driver@demo.rail" autocomplete="username" />
+        <label>Password</label>
+        <input id="password" type="password" value="password123" autocomplete="current-password" />
+        <button class="btn btn-primary" id="btnLogin">Sign In</button>
+        <p class="muted" style="margin-top:10px;">Demo: driver@demo.rail / password123</p>
+      </div>
+      <div id="loginMsg"></div>
+    </section>
+
+    <!-- HOME -->
+    <section id="view-home" class="hidden">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <h1 id="homeTitle">Home</h1>
+          <p class="muted" id="homeUser"></p>
+        </div>
+        <button class="btn btn-ghost" style="width:auto;padding:6px 10px;font-size:0.75rem;" id="btnLogout">Log out</button>
+      </div>
+      <div id="homeMsg"></div>
+      <div id="maintAlertsBox"></div>
+      <div class="card">
+        <label>Vehicle</label>
+        <select id="vehicleSelect"></select>
+        <div class="row"><span>Duty</span><strong id="dutyLabel">—</strong></div>
+        <div class="row"><span>Work today</span><strong id="workHours">0.00 h</strong></div>
+        <div class="row"><span>Miles while clocked in</span><strong id="workMiles">0.0 mi</strong></div>
+        <p class="muted" style="margin:4px 0 8px;font-size:0.72rem;">Tracked for ops · regular rate (not drive pay)</p>
+        <div class="row"><span>Paid drive today</span><strong id="driveHours">0.00 h</strong></div>
+        <div class="row"><span>Paid drive miles</span><strong id="driveMiles">0.0 mi</strong></div>
+        <p class="muted" style="margin:4px 0 8px;font-size:0.72rem;">Only from Start Drive → End Drive</p>
+        <div class="row"><span>Odometer</span><strong id="odoRead">—</strong></div>
+      </div>
+      <div class="card">
+        <h2>HOS Assist</h2>
+        <p class="muted" style="margin-top:0;">Not a certified ELD — operational limits only.</p>
+        <div class="row"><span>Drive today</span><span id="hosDrive">0 / 11 h</span></div>
+        <div class="row"><span>On-duty window</span><span id="hosOn">0 / 14 h</span></div>
+        <div class="row"><span>8-day total</span><span id="hos8">0 / 70 h</span></div>
+        <div id="hosWarnings"></div>
+        <div class="grid2" style="margin-top:10px;">
+          <button type="button" class="hos-btn" data-status="off">Off Duty</button>
+          <button type="button" class="hos-btn" data-status="sleeper">Sleeper</button>
+          <button type="button" class="hos-btn" data-status="onduty">On Duty</button>
+          <button type="button" class="hos-btn" data-status="driving">Driving →</button>
+        </div>
+      </div>
+      <div class="card" id="activeDriveCard" class="hidden">
+        <h2>Active drive</h2>
+        <div class="row"><span>Started</span><span id="driveStarted">—</span></div>
+        <div class="row"><span>Duration</span><span id="driveDur">—</span></div>
+        <div class="row"><span>Start odo</span><span id="driveStartOdo">—</span></div>
+        <button class="btn btn-end" id="btnEndDrive">End Drive</button>
+      </div>
+      <div class="grid2">
+        <button class="btn btn-primary" id="btnClockIn">Clock In</button>
+        <button class="btn btn-end" id="btnClockOut">Clock Out</button>
+      </div>
+      <button class="btn btn-drive" id="btnStartDrive">Start Drive (paid)</button>
+      <p class="muted" style="font-size:0.72rem;margin:6px 0 10px;">Typical day: Start Drive → arrive at job → End Drive → Clock In for work → Clock Out → Start Drive home → End Drive at lodging. Drive time is paid at the drive rate. Clock In/Out is work at the regular rate. Miles while only clocked in are tracked, not drive pay. Forgot End Drive? Auto-ends after ~15 min idle (or clock-out / duty change).</p>
+      <button class="btn btn-ghost" id="btnGoInspect">Pre-Trip Inspection</button>
+      <button class="btn btn-ghost" id="btnGoFuel">Log Fuel</button>
+      <button class="btn btn-ghost" id="btnEnablePush">Enable push alerts</button>
+    </section>
+
+    <!-- INSPECT -->
+    <section id="view-inspect" class="hidden">
+      <h1>Inspection</h1>
+      <div class="card">
+        <label>Type</label>
+        <select id="inspectType">
+          <option value="pretrip">Pre-Trip</option>
+          <option value="posttrip">Post-Trip</option>
+        </select>
+        <div id="inspectItems"></div>
+        <label>Notes</label>
+        <input id="inspectNotes" placeholder="Defect details" />
+        <label>Safe to operate?</label>
+        <select id="inspectSafe">
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+        <button class="btn btn-primary" id="btnSubmitInspect">Submit Inspection</button>
+        <button class="btn btn-ghost" id="btnBackHome">Back</button>
+      </div>
+    </section>
+
+    <!-- FUEL -->
+    <section id="view-fuel" class="hidden">
+      <h1>Log Fuel</h1>
+      <div class="card">
+        <label>Vendor</label>
+        <input id="fuelVendor" placeholder="Station name" />
+        <label>Amount ($)</label>
+        <input id="fuelAmount" type="number" step="0.01" placeholder="0.00" />
+        <label>Gallons</label>
+        <input id="fuelQty" type="number" step="0.01" placeholder="0.0" />
+        <label>Payment</label>
+        <select id="fuelPay">
+          <option>Company Card</option>
+          <option>Cash</option>
+          <option>Personal Card (reimburse)</option>
+        </select>
+        <label>Jurisdiction</label>
+        <select id="fuelJuris">
+          <option>TX</option><option>OK</option><option>NM</option><option>LA</option><option>AR</option><option>OTHER</option>
+        </select>
+        <button class="btn btn-primary" id="btnSaveFuel">Save Fuel Purchase</button>
+        <button class="btn btn-ghost" id="btnFuelBack">Back</button>
+      </div>
+    </section>
+  </div>
+
+  <nav class="nav hidden" id="bottomNav">
+    <button type="button" class="active" data-nav="home">Home</button>
+    <button type="button" data-nav="inspect">Inspect</button>
+  </nav>
+
+  <script>
+    const ITEMS = ['Brakes','Lights / Reflectors','Tires / Wheels','Steering','Horn','Windshield / Wipers','Mirrors','Coupling Devices','Fluid Levels','Emergency Equipment'];
+    const state = { token: localStorage.getItem('pr_token') || '', user: null, today: null, timer: null };
+
+    const $ = (id) => document.getElementById(id);
+    const apiBase = () => ($('apiBase')?.value || 'http://localhost:8080/api/v1').replace(/\/$/, '');
+
+    async function api(path, opts = {}) {
+      const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+      if (state.token) headers.Authorization = 'Bearer ' + state.token;
+      const res = await fetch(apiBase() + path, { ...opts, headers });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = new Error(data?.error?.message || res.statusText);
+        err.code = data?.error?.code;
+        err.payload = data;
+        throw err;
+      }
+      return data;
+    }
+
+    function show(view) {
+      ['login','home','inspect','fuel'].forEach(v => {
+        $(`view-${v}`).classList.toggle('hidden', v !== view);
+      });
+      $('bottomNav').classList.toggle('hidden', view === 'login');
+      document.querySelectorAll('.nav button').forEach(b => {
+        b.classList.toggle('active', b.dataset.nav === view);
+      });
+    }
+
+    function msg(el, text, type) {
+      el.innerHTML = text ? `<div class="banner ${type || 'warn'}">${text}</div>` : '';
+    }
+
+    function buildInspect() {
+      $('inspectItems').innerHTML = ITEMS.map((name, i) =>
+        `<div class="inspect-item"><span>${name}</span>
+          <select id="insp_${i}"><option value="ok">OK</option><option value="defect">Defect</option><option value="na">N/A</option></select>
+        </div>`
+      ).join('');
+    }
+
+    function renderToday() {
+      const t = state.today;
+      if (!t) return;
+      $('homeUser').textContent = (state.user?.name || '') + ' · driver';
+      const sel = $('vehicleSelect');
+      const prev = sel.value;
+      sel.innerHTML = (t.vehicles || []).map(v =>
+        `<option value="${v.id}">${v.code}${v.name ? ' — ' + v.name : ''}</option>`
+      ).join('');
+      if (prev) sel.value = prev;
+      const v = (t.vehicles || []).find(x => x.id === sel.value) || t.vehicles?.[0];
+      $('odoRead').textContent = v ? Number(v.current_odometer_mi).toFixed(1) + ' mi' : '—';
+      $('dutyLabel').textContent = t.hos?.statusLabel || '—';
+      $('workHours').textContent = Number(t.workHours || 0).toFixed(2) + ' h';
+      if ($('workMiles')) $('workMiles').textContent = Number(t.workMilesToday || 0).toFixed(1) + ' mi';
+      $('driveHours').textContent = Number(t.driveHours || 0).toFixed(2) + ' h';
+      if ($('driveMiles')) $('driveMiles').textContent = Number(t.driveMilesToday || 0).toFixed(1) + ' mi';
+      $('hosDrive').textContent = `${Number(t.hos?.driveToday || 0).toFixed(2)} / 11 h`;
+      $('hosOn').textContent = `${Number(t.hos?.onDutyToday || 0).toFixed(2)} / 14 h`;
+      $('hos8').textContent = `${Number(t.hos?.eightDay || 0).toFixed(2)} / 70 h`;
+      const warns = t.hos?.warnings || [];
+      $('hosWarnings').innerHTML = warns.map(w =>
+        `<div class="banner ${w.level === 'critical' ? 'err' : 'warn'}">${w.text}</div>`
+      ).join('');
+      document.querySelectorAll('.hos-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.status === t.hos?.status);
+      });
+
+      // Maintenance alerts
+      const mbox = $('maintAlertsBox');
+      if (mbox) {
+        const ma = t.maintenanceAlerts || [];
+        if (!ma.length) mbox.innerHTML = '';
+        else {
+          mbox.innerHTML = ma.slice(0,5).map(a => {
+            const label = a.status === 'overdue' ? 'OVERDUE' : 'DUE SOON';
+            const cls = a.status === 'overdue' ? 'err' : 'warn';
+            return `<div class="banner ${cls}"><strong>${label}</strong> ${a.vehicle_code || ''} — ${a.service_type}</div>`;
+          }).join('');
+        }
+      }
+
+
+      const od = t.openDrive;
+      const card = $('activeDriveCard');
+      if (od) {
+        card.classList.remove('hidden');
+        $('driveStarted').textContent = new Date(od.started_at).toLocaleString();
+        $('driveStartOdo').textContent = od.start_odo_mi != null ? Number(od.start_odo_mi).toFixed(1) + ' mi' : '—';
+        const hrs = (Date.now() - new Date(od.started_at)) / 3600000;
+        $('driveDur').textContent = hrs.toFixed(2) + ' h';
+        $('btnStartDrive').disabled = true;
+        $('btnEndDrive').disabled = false;
+      } else {
+        card.classList.add('hidden');
+        $('btnStartDrive').disabled = false;
+        $('btnEndDrive').disabled = true;
+      }
+      $('btnClockIn').disabled = !!t.openSession;
+      $('btnClockOut').disabled = !t.openSession;
+      $('homeTitle').textContent = v?.code || 'Home';
+    }
+
+    async function refresh() {
+      state.today = await api('/me/today');
+      renderToday();
+    }
+
+    $('btnLogin').onclick = async () => {
+      msg($('loginMsg'), 'Signing in…', 'ok');
+      try {
+        localStorage.setItem('pr_api', apiBase());
+        const data = await api('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email: $('email').value.trim(), password: $('password').value })
+        });
+        state.token = data.accessToken;
+        state.user = data.user;
+        localStorage.setItem('pr_token', state.token);
+        await refresh();
+        show('home');
+        msg($('loginMsg'), '');
+        if (state.timer) clearInterval(state.timer);
+        state.timer = setInterval(() => { if (state.today?.openDrive) renderToday(); }, 15000);
+      } catch (e) {
+        msg($('loginMsg'), e.message, 'err');
+      }
+    };
+
+    $('btnLogout').onclick = () => {
+      state.token = '';
+      localStorage.removeItem('pr_token');
+      show('login');
+    };
+
+    $('btnClockIn').onclick = async () => {
+      try {
+        await api('/sessions/clock-in', { method: 'POST', body: JSON.stringify({ vehicleId: $('vehicleSelect').value }) });
+        msg($('homeMsg'), 'Clocked in', 'ok');
+        await refresh();
+      } catch (e) { msg($('homeMsg'), e.message, 'err'); }
+    };
+
+    $('btnClockOut').onclick = async () => {
+      try {
+        await api('/sessions/clock-out', { method: 'POST', body: JSON.stringify({}) });
+        msg($('homeMsg'), 'Clocked out', 'ok');
+        await refresh();
+      } catch (e) { msg($('homeMsg'), e.message, 'err'); }
+    };
+
+    async function startDrive(force) {
+      try {
+        await api('/drives/start', {
+          method: 'POST',
+          body: JSON.stringify({ vehicleId: $('vehicleSelect').value, jurisdiction: 'TX', force: !!force })
+        });
+        msg($('homeMsg'), 'Drive started', 'ok');
+        await refresh();
+      } catch (e) {
+        if (e.code === 'PRETRIP_REQUIRED') {
+          msg($('homeMsg'), 'Pre-trip required — opening inspection', 'warn');
+          $('inspectType').value = 'pretrip';
+          show('inspect');
+          return;
+        }
+        if (e.code === 'HOS_LIMIT' && confirm(e.message + '\n\nStart anyway?')) {
+          return startDrive(true);
+        }
+        if (e.code === 'PRETRIP_REQUIRED' && confirm('No pre-trip. Force start?')) {
+          return startDrive(true);
+        }
+        msg($('homeMsg'), e.message, 'err');
+      }
+    }
+
+    $('btnStartDrive').onclick = () => startDrive(false);
+    $('btnEndDrive').onclick = async () => {
+      try {
+        await api('/drives/end', { method: 'POST', body: JSON.stringify({ vehicleId: $('vehicleSelect').value }) });
+        msg($('homeMsg'), 'Drive ended — complete post-trip', 'ok');
+        $('inspectType').value = 'posttrip';
+        await refresh();
+        show('inspect');
+      } catch (e) { msg($('homeMsg'), e.message, 'err'); }
+    };
+
+    document.querySelectorAll('.hos-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const status = btn.dataset.status;
+        if (status === 'driving') return startDrive(false);
+        try {
+          await api('/duty-status', {
+            method: 'POST',
+            body: JSON.stringify({ status, vehicleId: $('vehicleSelect').value })
+          });
+          await refresh();
+        } catch (e) { msg($('homeMsg'), e.message, 'err'); }
+      };
+    });
+
+    $('btnSubmitInspect').onclick = async () => {
+      const items = ITEMS.map((name, i) => ({ name, status: $('insp_' + i).value }));
+      try {
+        await api('/inspections', {
+          method: 'POST',
+          body: JSON.stringify({
+            vehicleId: $('vehicleSelect').value,
+            type: $('inspectType').value,
+            items,
+            safeToOperate: $('inspectSafe').value === 'yes',
+            notes: $('inspectNotes').value.trim() || null
+          })
+        });
+        msg($('homeMsg'), 'Inspection saved', 'ok');
+        show('home');
+        await refresh();
+      } catch (e) { alert(e.message); }
+    };
+
+    $('btnGoInspect').onclick = () => show('inspect');
+    $('btnBackHome').onclick = () => show('home');
+    document.querySelectorAll('.nav button').forEach(b => {
+      b.onclick = () => show(b.dataset.nav === 'inspect' ? 'inspect' : 'home');
+    });
+    $('vehicleSelect')?.addEventListener('change', renderToday);
+
+
+    $('btnGoFuel').onclick = () => show('fuel');
+    $('btnFuelBack').onclick = () => show('home');
+    $('btnSaveFuel').onclick = async () => {
+      try {
+        const amount = parseFloat($('fuelAmount').value);
+        if (!(amount > 0)) throw new Error('Enter a valid amount');
+        await api('/expenses', {
+          method: 'POST',
+          body: JSON.stringify({
+            vehicleId: $('vehicleSelect').value,
+            type: 'Fuel',
+            amount,
+            quantity: $('fuelQty').value ? parseFloat($('fuelQty').value) : null,
+            vendor: $('fuelVendor').value.trim() || null,
+            paymentMethod: $('fuelPay').value,
+            jurisdiction: $('fuelJuris').value
+          })
+        });
+        msg($('homeMsg'), 'Fuel logged', 'ok');
+        show('home');
+        $('fuelAmount').value = '';
+        $('fuelQty').value = '';
+        $('fuelVendor').value = '';
+      } catch (e) { alert(e.message); }
+    };
+
+
+    function webPushToken() {
+      let t = localStorage.getItem('pr_web_push_token');
+      if (!t) {
+        t = 'web-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
+        localStorage.setItem('pr_web_push_token', t);
+      }
+      return t;
+    }
+
+    async function registerPushDevice() {
+      const token = webPushToken();
+      // Browser notification permission (in-app alerts when tab open / OS when granted)
+      if ('Notification' in window && Notification.permission === 'default') {
+        await Notification.requestPermission();
+      }
+      await api('/notifications/register-device', {
+        method: 'POST',
+        body: JSON.stringify({
+          token,
+          platform: 'web',
+          deviceLabel: navigator.userAgent.slice(0, 80)
+        })
+      });
+      return token;
+    }
+
+    $('btnEnablePush') && ($('btnEnablePush').onclick = async () => {
+      try {
+        await registerPushDevice();
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Precision Rail', { body: 'Push alerts enabled on this device.' });
+        }
+        msg($('homeMsg'), 'Push alerts enabled for this device', 'ok');
+      } catch (e) {
+        msg($('homeMsg'), e.message, 'err');
+      }
+    });
+
+    buildInspect();
+    if (localStorage.getItem('pr_api')) $('apiBase').value = localStorage.getItem('pr_api');
+    if (state.token) {
+      api('/auth/me').then(d => {
+        state.user = { name: d.user.name, role: d.user.role };
+        return refresh();
+      }).then(() => show('home')).catch(() => {
+        state.token = '';
+        localStorage.removeItem('pr_token');
+        show('login');
+      });
+    } else {
+      show('login');
+    }
+  </script>
+</body>
+</html>
