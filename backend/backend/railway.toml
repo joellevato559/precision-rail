@@ -1,0 +1,9 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/api/v1"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
