@@ -1,0 +1,34 @@
+PRECISION RAIL — CLEAN UPLOAD (read this first)
+
+1. On GitHub, open your precision-rail repo on branch "main".
+
+2. Delete old messy folders if needed (especially any nested backend/backend).
+   You want the TOP of the repo to look like:
+      backend/
+      driver-pwa/
+      manager-web/
+      db/
+
+3. Click "Add file" → "Upload files".
+
+4. From THIS unzipped folder, drag these items onto GitHub:
+      - backend
+      - driver-pwa
+      - manager-web
+      - db
+
+   Do NOT drag a folder named precision-rail-pro.
+   Do NOT put backend inside another backend.
+
+5. Commit message: Clean Railway deploy
+   Commit to main.
+
+6. On Railway, set Root Directory:
+      API     = backend
+      Driver  = driver-pwa
+      Manager = manager-web
+
+7. Redeploy each service. Wait until Online.
+
+8. Test API:
+   https://YOUR-API-DOMAIN/api/v1
