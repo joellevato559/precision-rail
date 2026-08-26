@@ -5,9 +5,7 @@
   "description": "Precision Rail Time and Mileage API",
   "main": "src/index.js",
   "scripts": {
-    "dev": "node --watch src/index.js",
-    "start": "npm install --omit=dev && node src/index.js",
-    "db:apply": "psql \"$DATABASE_URL\" -f ../db/schema.sql"
+    "start": "node src/index.js"
   },
   "engines": {
     "node": ">=20"
