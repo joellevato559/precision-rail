@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Precision Rail Group — Manager</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+    async function loadUsers(){
+      const box = $('usersList');
+      if(!box) return;
+      box.innerHTML = '<div class="muted">Loading…</div>';
+      try {
+        const data = await api('/users');
+        const rows = data.users || [];
+        if(!rows.length){ box.innerHTML = '<div class="muted">No users yet.</div>'; return; }
+        box.innerHTML = `<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Active</th><th></th></tr></thead><tbody>` +
+          rows.map(u => `<tr>
+            <td>${u.name||''}</td>
+            <td>${u.email||''}</td>
+            <td>${u.role||''}</td>
+            <td>${u.active ? 'Yes' : 'No'}</td>
+            <td><button class="ghost btn-reset-pw" data-id="${u.id}">Reset PW</button>
+                <button class="ghost btn-toggle-active" data-id="${u.id}" data-active="${u.active}">${u.active?'Disable':'Enable'}</button></td>
+          </tr>`).join('') + `</tbody></table>`;
+        box.querySelectorAll('.btn-reset-pw').forEach(btn => {
+          btn.onclick = async () => {
+            const pw = prompt('New temporary password (min 8 characters):');
+            if(!pw) return;
+            try {
+              await api('/users/'+btn.dataset.id+'/password', { method:'POST', body: JSON.stringify({ password: pw }) });
+              alert('Password updated');
+            } catch(e){ alert(e.message); }
+          };
+        });
+        box.querySelectorAll('.btn-toggle-active').forEach(btn => {
+          btn.onclick = async () => {
+            const next = btn.dataset.active !== 'true';
+            try {
+              await api('/users/'+btn.dataset.id, { method:'PATCH', body: JSON.stringify({ active: next }) });
+              loadUsers();
+            } catch(e){ alert(e.message); }
+          };
+        });
+      } catch(e){
+        box.innerHTML = `<div class="banner err">${e.message}</div>`;
+      }
+    }
+
+    if($('btnRefreshUsers')) $('btnRefreshUsers').onclick = () => loadUsers();
+    if($('btnCreateUser')) $('btnCreateUser').onclick = async () => {
+      const msg = $('usersMsg');
+      msg.innerHTML = '';
+      try {
+        const body = {
+          name: $('newUserName').value.trim(),
+          email: $('newUserEmail').value.trim(),
+          password: $('newUserPass').value,
+          role: $('newUserRole').value,
+          employeeCode: $('newUserEmp').value.trim() || undefined,
+          licenseNumber: ($('newUserLicense') && $('newUserLicense').value.trim()) || undefined,
+          licenseState: ($('newUserLicState') && $('newUserLicState').value.trim()) || undefined,
+          workRate: Number($('newUserWorkRate').value)||25,
+          driveRate: Number($('newUserDriveRate').value)||30
+        };
+        const r = await api('/users', { method:'POST', body: JSON.stringify(body) });
+        msg.innerHTML = `<div class="banner ok">Created ${r.user.name} — ${r.user.email} (${r.user.role}). ${r.user.role==='driver' ? 'They can sign in on the Driver app.' : 'They can sign in on the Manager app.'}</div>`;
+        $('newUserName').value=''; $('newUserEmail').value=''; $('newUserPass').value='';
+        loadUsers();
+      } catch(e){
+        msg.innerHTML = `<div class="banner err">${e.message}</div>`;
+      }
+    };
+
+    // Hook tab switch to load users
+    document.querySelectorAll('#tabs button').forEach(b => {
+      b.addEventListener('click', () => {
+        if(b.dataset.tab === 'users') loadUsers();
+      });
+    });
+
+
+    let pendingResetToken = '';
+    (function(){
+      const params = new URLSearchParams(location.search);
+      if (params.get('resetToken')) {
+        pendingResetToken = params.get('resetToken');
+        if ($('resetBox')) $('resetBox').classList.remove('hidden');
+      }
+    })();
+    if ($('btnForgot')) $('btnForgot').onclick = () => {
+      $('forgotBox').classList.toggle('hidden');
+      if ($('forgotEmail') && $('email')) $('forgotEmail').value = $('email').value;
+    };
+    if ($('btnSendReset')) $('btnSendReset').onclick = async () => {
+      try {
+        const email = ($('forgotEmail')?.value || $('email')?.value || '').trim();
+        await api('/auth/forgot-password', {
+          method: 'POST',
+          body: JSON.stringify({ email, resetBaseUrl: location.origin })
+        });
+        alert('If that email is registered, a reset link was sent.');
+      } catch (e) { alert(e.message); }
+    };
+    if ($('btnDoReset')) $('btnDoReset').onclick = async () => {
+      try {
+        await api('/auth/reset-password', {
+          method: 'POST',
+          body: JSON.stringify({ token: pendingResetToken, password: $('resetPassword').value })
+        });
+        alert('Password updated. Sign in with your new password.');
+        $('resetBox').classList.add('hidden');
+        history.replaceState({}, '', location.pathname);
+      } catch (e) { alert(e.message); }
+    };
+
+
+    if ($('btnCreateVehicle')) $('btnCreateVehicle').onclick = async () => {
+      const msg = $('vehMsg');
+      if (msg) msg.innerHTML = '';
+      try {
+        const r = await api('/fleet/vehicles', {
+          method: 'POST',
+          body: JSON.stringify({
+            code: $('newVehCode').value.trim(),
+            name: $('newVehName').value.trim() || undefined,
+            plate: $('newVehPlate').value.trim() || undefined,
+            odometerMi: Number($('newVehOdo').value) || 0
+          })
+        });
+        if (msg) msg.innerHTML = '<div class="banner ok">Added vehicle ' + r.vehicle.code + '</div>';
+        $('newVehCode').value = '';
+        $('newVehName').value = '';
+        $('newVehPlate').value = '';
+      } catch (e) {
+        if (msg) msg.innerHTML = '<div class="banner err">' + e.message + '</div>';
+        else alert(e.message);
+      }
+    };
+
+</script>
+  <style>
+    :root { --bg:#0f172a; --card:#1e293b; --border:#334155; --text:#f1f5f9; --muted:#94a3b8; --accent:#38bdf8; --ok:#22c55e; --warn:#f59e0b; --danger:#ef4444; --teal:#0d9488; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    header { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; border-bottom:1px solid var(--border); background:#1e293b; gap:12px; flex-wrap:wrap; }
+    header h1 { font-size:1.05rem; margin:0; }
+    .tabs { display:flex; gap:4px; flex-wrap:wrap; }
+    .tabs button { background:transparent; border:1px solid transparent; color:var(--muted); padding:8px 12px; border-radius:8px; cursor:pointer; font-size:0.8rem; }
+    .tabs button.active { color:var(--accent); border-color:var(--border); background:#0f172a; }
+    .muted { color:var(--muted); font-size:0.8rem; }
+    .layout { display:grid; grid-template-columns:1fr 340px; min-height:calc(100vh - 54px); }
+    @media(max-width:960px){ .layout{ grid-template-columns:1fr; } }
+    #map { height:calc(100vh - 54px); min-height:320px; }
+    .side, .panel { padding:14px; overflow:auto; max-height:calc(100vh - 54px); }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:10px; }
+    .card h3 { margin:0 0 6px; font-size:0.9rem; color:var(--accent); }
+    table { width:100%; border-collapse:collapse; font-size:0.78rem; }
+    th, td { border-bottom:1px solid var(--border); padding:6px 4px; text-align:left; }
+    input, select, button.action { padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:#0f172a; color:var(--text); }
+    button.action { background:var(--accent); color:#0f172a; border:none; font-weight:600; cursor:pointer; }
+    button.ghost { background:transparent; border:1px solid var(--border); color:var(--text); cursor:pointer; padding:8px 10px; border-radius:8px; }
+    button.teal { background:var(--teal); color:#fff; border:none; padding:8px 10px; border-radius:8px; cursor:pointer; font-weight:600; }
+    .hidden { display:none !important; }
+    .login-box { max-width:400px; margin:70px auto; padding:24px; background:var(--card); border-radius:12px; border:1px solid var(--border); }
+    label { display:block; font-size:0.72rem; color:var(--muted); margin:8px 0 4px; }
+    input[type=text], input[type=password], input[type=email], input[type=date], input[type=number] { width:100%; }
+    .badge { display:inline-block; font-size:0.65rem; padding:2px 6px; border-radius:999px; background:#334155; }
+    .badge.live { background:rgba(34,197,94,.2); color:var(--ok); }
+    .badge.drive { background:rgba(13,148,136,.25); color:#5eead4; }
+    .badge.crit { background:rgba(239,68,68,.2); color:var(--danger); }
+    .badge.warn { background:rgba(245,158,11,.2); color:var(--warn); }
+    .banner { padding:8px; border-radius:8px; font-size:.8rem; margin:8px 0; }
+    .banner.err { background:rgba(239,68,68,.15); color:var(--danger); }
+    .banner.ok { background:rgba(34,197,94,.12); color:var(--ok); }
+    .row-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div id="loginView">
+    <div class="login-box">
+      <div style="text-align:center;margin-bottom:12px;">
+        <img src="prg-logo.jpg" alt="Precision Rail Group" style="max-width:240px;width:80%;height:auto;border-radius:8px;" />
+      </div>
+      <h1 style="text-align:center;">Manager Console</h1>
+      <p class="muted" style="text-align:center;">Live fleet · approvals · payroll · integrity</p>
+      <label>API base</label>
+      <input id="apiBase" value="http://localhost:8080/api/v1" />
+      <label>Email</label>
+      <input id="email" value="manager@demo.rail" />
+      <label>Password</label>
+      <input id="password" type="password" value="password123" />
+      <button class="action" style="width:100%;margin-top:14px;" id="btnLogin">Sign In</button>
+      <button type="button" class="ghost" style="width:100%;margin-top:8px;" id="btnForgot">Forgot password?</button>
+      <div id="forgotBox" class="hidden" style="margin-top:12px;">
+        <label>Email for reset link</label>
+        <input id="forgotEmail" type="email" placeholder="you@company.com" style="width:100%" />
+        <button class="action" style="width:100%;margin-top:8px;" id="btnSendReset">Send reset email</button>
+      </div>
+      <div id="resetBox" class="hidden" style="margin-top:12px;">
+        <label>New password</label>
+        <input id="resetPassword" type="password" placeholder="Min 8 characters" style="width:100%" />
+        <button class="action" style="width:100%;margin-top:8px;" id="btnDoReset">Set new password</button>
+      </div>
+      <div id="loginMsg"></div>
+    </div>
+  </div>
+
+  <div id="appView" class="hidden">
+    <header>
+      <div>
+        <h1 style="display:flex;align-items:center;gap:10px;"><img src="prg-logo.jpg" alt="" style="height:36px;width:auto;border-radius:4px;" /> Manager</h1>
+        <div class="muted" id="userLine"></div>
+      </div>
+      <div class="tabs" id="tabs">
+        <button data-tab="fleet" class="active">Live Fleet</button>
+        <button data-tab="approvals">Approvals</button>
+        <button data-tab="payroll">Payroll</button>
+        <button data-tab="integrity">Integrity</button>
+        <button data-tab="maint">Maintenance</button>
+        <button data-tab="push">Push</button>
+        <button data-tab="audit">Audit</button>
+        <button data-tab="users">Drivers</button>
+      </div>
+      <button class="ghost" id="btnLogout">Log out</button>
+    </header>
+
+    <div id="tab-fleet" class="layout">
+      <div id="map"></div>
+      <aside class="side">
+        <div class="row-actions">
+          <button class="ghost" id="btnRefreshFleet">Refresh</button>
+          <button class="teal" id="btnSimTrip">Simulate trip</button>
+        </div>
+        <div class="muted" id="fleetMeta" style="margin:8px 0;">—</div>
+        <div id="fleetList"></div>
+      </aside>
+    </div>
+
+    <div id="tab-approvals" class="panel hidden">
+      <div class="card">
+        <h3>Pending timesheets</h3>
+        <button class="ghost" id="btnRefreshPending">Refresh</button>
+        <div id="pendingList" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <div id="tab-payroll" class="panel hidden">
+      <div class="card">
+        <h3>Payroll export</h3>
+        <p class="muted">Work hours = approved sessions. Drive hours = completed drives (Drive Rate).</p>
+        <label>Week start (Monday)</label>
+        <input type="date" id="weekStart" />
+        <div class="row-actions">
+          <button class="action" id="btnPayrollPreview">Preview</button>
+          <button class="teal" id="btnPayrollExport">Download CSV &amp; Mark Submitted</button>
+        </div>
+        <div id="payrollOut" style="margin-top:12px;"></div>
+      </div>
+    </div>
+
+    <div id="tab-integrity" class="panel hidden">
+      <div class="card">
+        <h3>Fuel &amp; mileage integrity</h3>
+        <div class="row-actions">
+          <button class="action" id="btnScanIntegrity">Scan fleet</button>
+          <button class="ghost" id="btnRefreshFlags">Refresh flags</button>
+        </div>
+        <div id="flagsList" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
+    
+    <div id="tab-maint" class="panel hidden">
+      <div class="card">
+        <h3>Maintenance alerts</h3>
+        <p class="muted">Oil changes and other scheduled service based on miles and/or calendar days.</p>
+        <div class="row-actions">
+          <button class="ghost" id="btnRefreshMaint">Refresh</button>
+        </div>
+        <div id="maintAlerts" style="margin-top:10px;"></div>
+      </div>
+      <div class="card">
+        <h3>All schedules</h3>
+        <div id="maintSchedules"></div>
+      </div>
+      <div class="card">
+        <h3>Add schedule</h3>
+        <label>Vehicle ID (from fleet list)</label>
+        <select id="maintVehicle"></select>
+        <label>Service type</label>
+        <input id="maintType" placeholder="Oil Change, Tires, DOT Inspection…" />
+        <label>Interval miles (optional)</label>
+        <input id="maintMiles" type="number" placeholder="5000" />
+        <label>Interval days (optional)</label>
+        <input id="maintDays" type="number" placeholder="180" />
+        <label>Warn miles before</label>
+        <input id="maintWarnMi" type="number" value="500" />
+        <label>Warn days before</label>
+        <input id="maintWarnDays" type="number" value="14" />
+        <div class="row-actions">
+          <button class="action" id="btnAddMaint">Create schedule</button>
+        </div>
+        <div id="maintFormMsg"></div>
+      </div>
+      <div class="card">
+        <h3>Recent service log</h3>
+        <div id="maintLogs"></div>
+      </div>
+    </div>
+
+    
+    <div id="tab-push" class="panel hidden">
+      <div class="card">
+        <h3>Mobile push notifications</h3>
+        <p class="muted">Register devices from the driver app (Enable push alerts). Provider is set on the server (console / webhook / fcm). See docs/INTEGRATIONS.md.</p>
+        <div class="row-actions">
+          <button class="action" id="btnTestPush">Send test to me</button>
+          <button class="teal" id="btnMaintPush">Push maintenance summary</button>
+        </div>
+        <div id="pushMsg" style="margin-top:10px;"></div>
+      </div>
+      <div class="card">
+        <h3>Broadcast to drivers</h3>
+        <label>Title</label>
+        <input id="bcastTitle" placeholder="Message title" />
+        <label>Body</label>
+        <input id="bcastBody" placeholder="Message body" />
+        <div class="row-actions">
+          <button class="action" id="btnBroadcast">Send broadcast</button>
+        </div>
+        <div id="bcastMsg"></div>
+      </div>
+    </div>
+
+    <div id="tab-audit" class="panel hidden">
+      <div class="card">
+        <h3>Audit trail</h3>
+        <button class="ghost" id="btnRefreshAudit">Refresh</button>
+        <div id="auditList" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  
+    <div id="tab-users" class="panel hidden">
+      <div class="card">
+        <h3>Drivers &amp; team</h3>
+        <p class="muted">Add drivers here to create their login. They sign in on the Driver app with the email and password you set. Office staff use the Manager app.</p>
+        <button class="ghost" id="btnRefreshUsers">Refresh list</button>
+        <div id="usersList" style="margin-top:10px;"></div>
+      </div>
+      <div class="card">
+        <h3>Add driver (or staff)</h3>
+        <label>Full name</label>
+        <input id="newUserName" placeholder="Jane Driver" style="width:100%;margin-bottom:8px;" />
+        <label>Email (their login)</label>
+        <input id="newUserEmail" type="email" placeholder="jane@company.com" style="width:100%;margin-bottom:8px;" />
+        <label>Temporary password (min 8 characters)</label>
+        <input id="newUserPass" type="text" placeholder="TempPass123" style="width:100%;margin-bottom:8px;" />
+        <label>Role</label>
+        <select id="newUserRole" style="width:100%;margin-bottom:8px;">
+          <option value="driver" selected>Driver</option>
+          <option value="supervisor">Supervisor</option>
+          <option value="manager">Manager</option>
+          <option value="admin">Admin</option>
+        </select>
+        <label>Employee code</label>
+        <input id="newUserEmp" placeholder="EMP-101" style="width:100%;margin-bottom:8px;" />
+        <label>License number (optional)</label>
+        <input id="newUserLicense" placeholder="D1234567" style="width:100%;margin-bottom:8px;" />
+        <label>License state (optional)</label>
+        <input id="newUserLicState" placeholder="TX" maxlength="2" style="width:100%;margin-bottom:8px;" />
+        <label>Work rate $/hr (hourly job time)</label>
+        <input id="newUserWorkRate" type="number" step="0.01" value="25" style="width:100%;margin-bottom:8px;" />
+        <label>Drive rate $/hr (paid drive time)</label>
+        <input id="newUserDriveRate" type="number" step="0.01" value="30" style="width:100%;margin-bottom:8px;" />
+        <button class="action" id="btnCreateUser">Create driver login</button>
+        <div id="usersMsg" style="margin-top:10px;"></div>
+      </div>
+      <div class="card">
+        <h3>Add vehicle</h3>
+        <p class="muted">Trucks/units drivers can select when clocking in or starting drive.</p>
+        <label>Unit code</label>
+        <input id="newVehCode" placeholder="TRUCK-03" style="width:100%;margin-bottom:8px;" />
+        <label>Name</label>
+        <input id="newVehName" placeholder="Spare unit" style="width:100%;margin-bottom:8px;" />
+        <label>Plate</label>
+        <input id="newVehPlate" placeholder="ABC-1234" style="width:100%;margin-bottom:8px;" />
+        <label>Current odometer (miles)</label>
+        <input id="newVehOdo" type="number" step="0.1" value="0" style="width:100%;margin-bottom:8px;" />
+        <button class="teal" id="btnCreateVehicle">Add vehicle</button>
+        <div id="vehMsg" style="margin-top:10px;"></div>
+      </div>
+
+    </div>
+<script>
+    const state = { token: localStorage.getItem('pr_mgr_token')||'', map:null, markers:{}, vehicles:[], selectedVehicleId:null, user:null };
+    const $ = id => document.getElementById(id);
+    const apiBase = () => ($('apiBase').value||'http://localhost:8080/api/v1').replace(/\/$/,'');
+
+    async function api(path, opts={}) {
+      const headers = { 'Content-Type':'application/json', ...(opts.headers||{}) };
+      if (state.token) headers.Authorization = 'Bearer ' + state.token;
+      const res = await fetch(apiBase()+path, { ...opts, headers });
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok) throw new Error(data?.error?.message || res.statusText);
+      return data;
+    }
+
+    function showTab(name) {
+      ['fleet','approvals','payroll','integrity','maint','push','audit','users'].forEach(t => {
+        const el = $('tab-'+t);
+        if (el) el.classList.toggle('hidden', t!==name);
+      });
+      document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
+      if (name==='fleet' && state.map) setTimeout(()=>state.map.invalidateSize(), 100);
+      if (name==='approvals') loadPending();
+      if (name==='integrity') loadFlags();
+      if (name==='maint') loadMaint();
+      if (name==='audit') loadAudit();
+      if (name==='users') loadUsers();
+    }
+
+    function initMap() {
+      if (state.map) return;
+      state.map = L.map('map').setView([32.78,-96.80], 8);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ attribution:'&copy; OSM' }).addTo(state.map);
+    }
+
+    function badge(v) {
+      if (v.open_drive_id) return '<span class="badge drive">Driving</span>';
+      if (v.last_position_at && (Date.now()-new Date(v.last_position_at))/60000 < 15)
+        return '<span class="badge live">Online</span>';
+      return '<span class="badge">Offline</span>';
+    }
+
+    function renderFleet(vehicles) {
+      state.vehicles = vehicles;
+      $('fleetMeta').textContent = vehicles.length + ' vehicle(s) · ' + new Date().toLocaleTimeString();
+      $('fleetList').innerHTML = vehicles.map(v => {
+        const speed = v.speed_mph!=null ? Number(v.speed_mph).toFixed(0)+' mph' : '—';
+        const odo = v.current_odometer_mi!=null ? Number(v.current_odometer_mi).toFixed(1)+' mi' : '—';
+        return `<div class="card" data-id="${v.id}" data-lat="${v.lat||''}" data-lng="${v.lng||''}">
+          <h3>${v.code} ${badge(v)}</h3>
+          <div class="muted">${v.name||''}</div>
+          <div style="font-size:.85rem;margin-top:6px;">
+            Driver: <strong>${v.driver_name||'—'}</strong><br/>
+            ${speed} · Odo ${odo}<br/>
+            ${v.last_position_at ? new Date(v.last_position_at).toLocaleString() : 'No GPS'}
+          </div>
+        </div>`;
+      }).join('') || '<p class="muted">No vehicles</p>';
+
+      const bounds=[];
+      vehicles.forEach(v=>{
+        if(v.lat==null||v.lng==null) return;
+        const html=`<strong>${v.code}</strong><br>${v.driver_name||'—'}<br>${v.speed_mph!=null?Number(v.speed_mph).toFixed(0)+' mph':'—'}`;
+        if(state.markers[v.id]) state.markers[v.id].setLatLng([v.lat,v.lng]).setPopupContent(html);
+        else state.markers[v.id]=L.marker([v.lat,v.lng]).addTo(state.map).bindPopup(html);
+        bounds.push([v.lat,v.lng]);
+      });
+      if(bounds.length) state.map.fitBounds(bounds,{padding:[40,40],maxZoom:12});
+      document.querySelectorAll('#fleetList .card').forEach(c=>{
+        c.onclick=()=>{
+          state.selectedVehicleId=c.dataset.id;
+          if(c.dataset.lat&&c.dataset.lng) state.map.setView([+c.dataset.lat,+c.dataset.lng],13);
+        };
+      });
+    }
+
+    async function loadFleet() {
+      const data = await api('/fleet/live');
+      renderFleet(data.vehicles||[]);
+    }
+
+    async function loadPending() {
+      const data = await api('/payroll/pending-sessions');
+      const rows = data.sessions||[];
+      if(!rows.length){ $('pendingList').innerHTML='<p class="muted">No pending sessions.</p>'; return; }
+      $('pendingList').innerHTML = `<table><tr><th>Driver</th><th>Vehicle</th><th>In</th><th>Hours</th><th></th></tr>`+
+        rows.map(s=>`<tr>
+          <td>${s.driver_name}</td><td>${s.vehicle_code}</td>
+          <td>${new Date(s.clock_in).toLocaleString()}</td>
+          <td>${Number(s.hours||0).toFixed(2)}</td>
+          <td><button class="action" data-approve="${s.id}">Approve</button></td>
+        </tr>`).join('')+`</table>`;
+      document.querySelectorAll('[data-approve]').forEach(btn=>{
+        btn.onclick=async()=>{
+          await api('/payroll/sessions/'+btn.dataset.approve+'/approve',{method:'POST',body:'{}'});
+          loadPending();
+        };
+      });
+    }
+
+    async function loadFlags() {
+      const data = await api('/integrity/flags?status=open');
+      const flags=data.flags||[];
+      if(!flags.length){ $('flagsList').innerHTML='<p class="muted" style="color:var(--ok)">No open flags.</p>'; return; }
+      $('flagsList').innerHTML=flags.map(f=>`<div class="card">
+        <h3><span class="badge ${f.severity==='critical'?'crit':f.severity==='warning'?'warn':''}">${f.severity}</span> ${f.title}</h3>
+        <div class="muted">${f.vehicle_code||''} · ${f.code} · ${new Date(f.created_at).toLocaleString()}</div>
+        <div style="font-size:.85rem;margin-top:6px;">${f.detail||''}</div>
+        <button class="ghost" style="margin-top:8px;" data-dismiss="${f.id}">Dismiss</button>
+      </div>`).join('');
+      document.querySelectorAll('[data-dismiss]').forEach(b=>{
+        b.onclick=async()=>{ await api('/integrity/flags/'+b.dataset.dismiss+'/dismiss',{method:'POST',body:'{}'}); loadFlags(); };
+      });
+    }
+
+    async function loadAudit() {
+      const data = await api('/audit');
+      const ev=data.events||[];
+      $('auditList').innerHTML = ev.length ? ev.map(e=>`<div style="font-size:.78rem;padding:8px 0;border-bottom:1px solid var(--border);">
+        <strong>${e.action}</strong> — ${e.detail||''}<br/>
+        <span class="muted">${new Date(e.created_at).toLocaleString()} · ${e.actor_name||''}</span>
+      </div>`).join('') : '<p class="muted">No events</p>';
+    }
+
+
+    async function loadMaint() {
+      try {
+        const [alertsData, schedData, logsData] = await Promise.all([
+          api('/maintenance/alerts'),
+          api('/maintenance/schedules'),
+          api('/maintenance/logs')
+        ]);
+        const alerts = alertsData.alerts || [];
+        const sum = alertsData.summary || {};
+        $('maintAlerts').innerHTML =
+          `<p class="muted">${sum.overdue||0} overdue · ${sum.dueSoon||0} due soon</p>` +
+          (alerts.length ? alerts.map(a => {
+            const badge = a.status === 'overdue'
+              ? '<span class="badge crit">OVERDUE</span>'
+              : '<span class="badge warn">DUE SOON</span>';
+            const mi = a.milesRemaining != null ? `${Number(a.milesRemaining).toFixed(0)} mi remaining` : '';
+            const dy = a.daysRemaining != null ? `${a.daysRemaining} days remaining` : '';
+            return `<div class="card">
+              <h3>${badge} ${a.vehicle_code} — ${a.service_type}</h3>
+              <div class="muted">${[mi,dy].filter(Boolean).join(' · ') || a.description || ''}</div>
+              <div style="font-size:.85rem;margin-top:6px;">
+                Next due odo: ${a.next_due_odo_mi != null ? Number(a.next_due_odo_mi).toFixed(0)+' mi' : '—'}
+                · date: ${a.next_due_date || '—'}
+                · current odo: ${a.current_odometer_mi != null ? Number(a.current_odometer_mi).toFixed(0) : '—'}
+              </div>
+              <button class="teal" style="margin-top:8px;" data-complete="${a.id}">Mark completed</button>
+            </div>`;
+          }).join('') : '<p class="muted" style="color:var(--ok)">No due or overdue items.</p>');
+
+        document.querySelectorAll('[data-complete]').forEach(btn => {
+          btn.onclick = async () => {
+            if (!confirm('Mark this service as completed and advance next due?')) return;
+            await api('/maintenance/complete', {
+              method: 'POST',
+              body: JSON.stringify({ scheduleId: btn.dataset.complete })
+            });
+            loadMaint();
+          };
+        });
+
+        const schedules = schedData.schedules || [];
+        $('maintSchedules').innerHTML = schedules.length
+          ? `<table><tr><th>Vehicle</th><th>Service</th><th>Interval</th><th>Next due</th><th>Status</th></tr>` +
+            schedules.map(s => `<tr>
+              <td>${s.vehicle_code}</td>
+              <td>${s.service_type}</td>
+              <td>${s.interval_miles != null ? s.interval_miles+' mi' : ''}${s.interval_miles && s.interval_days ? ' / ' : ''}${s.interval_days != null ? s.interval_days+' d' : ''}</td>
+              <td>${s.next_due_odo_mi != null ? Number(s.next_due_odo_mi).toFixed(0)+' mi' : ''} ${s.next_due_date || ''}</td>
+              <td>${s.status}</td>
+            </tr>`).join('') + `</table>`
+          : '<p class="muted">No schedules</p>';
+
+        // vehicle dropdown from fleet cache or schedules
+        const vids = {};
+        (state.vehicles||[]).forEach(v => { vids[v.id] = v.code; });
+        schedules.forEach(s => { vids[s.vehicle_id] = s.vehicle_code; });
+        $('maintVehicle').innerHTML = Object.keys(vids).map(id =>
+          `<option value="${id}">${vids[id]}</option>`).join('') || '<option value="">Load fleet first</option>';
+
+        const logs = logsData.logs || [];
+        $('maintLogs').innerHTML = logs.length
+          ? logs.slice(0,20).map(l => `<div style="font-size:.8rem;padding:6px 0;border-bottom:1px solid var(--border);">
+              <strong>${l.vehicle_code}</strong> · ${l.service_type} · ${l.performed_at}
+              ${l.odometer_mi != null ? ' · '+Number(l.odometer_mi).toFixed(0)+' mi' : ''}
+              ${l.cost != null ? ' · $'+Number(l.cost).toFixed(2) : ''}
+            </div>`).join('')
+          : '<p class="muted">No service history yet</p>';
+      } catch (e) {
+        $('maintAlerts').innerHTML = `<div class="banner err">${e.message}</div>`;
+      }
+    }
+
+    $('btnRefreshMaint') && ($('btnRefreshMaint').onclick = () => loadMaint());
+    $('btnAddMaint') && ($('btnAddMaint').onclick = async () => {
+      try {
+        const body = {
+          vehicleId: $('maintVehicle').value,
+          serviceType: $('maintType').value.trim(),
+          intervalMiles: $('maintMiles').value ? Number($('maintMiles').value) : null,
+          intervalDays: $('maintDays').value ? Number($('maintDays').value) : null,
+          warnMilesBefore: Number($('maintWarnMi').value || 500),
+          warnDaysBefore: Number($('maintWarnDays').value || 14)
+        };
+        if (!body.vehicleId || !body.serviceType) throw new Error('Vehicle and service type required');
+        if (body.intervalMiles == null && body.intervalDays == null) throw new Error('Enter miles and/or days interval');
+        await api('/maintenance/schedules', { method: 'POST', body: JSON.stringify(body) });
+        $('maintFormMsg').innerHTML = '<div class="banner ok">Schedule created</div>';
+        $('maintType').value = '';
+        loadMaint();
+      } catch (e) {
+        $('maintFormMsg').innerHTML = `<div class="banner err">${e.message}</div>`;
+      }
+    });
+
+
+    $('btnTestPush') && ($('btnTestPush').onclick = async () => {
+      try {
+        // register this browser as manager device too
+        let tok = localStorage.getItem('pr_mgr_push_token');
+        if (!tok) { tok = 'web-mgr-' + Date.now(); localStorage.setItem('pr_mgr_push_token', tok); }
+        if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
+        await api('/notifications/register-device', { method:'POST', body: JSON.stringify({ token: tok, platform:'web', deviceLabel:'Manager browser' }) });
+        const r = await api('/notifications/test', { method:'POST', body: JSON.stringify({}) });
+        $('pushMsg').innerHTML = `<div class="banner ok">Test sent (provider: ${r.provider}, devices hit: ${r.result?.sent ?? 0}). Check API server logs if provider=console.</div>`;
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Precision Rail', { body: 'Test notification' });
+        }
+      } catch (e) { $('pushMsg').innerHTML = `<div class="banner err">${e.message}</div>`; }
+    });
+    $('btnMaintPush') && ($('btnMaintPush').onclick = async () => {
+      try {
+        const r = await api('/maintenance/check-notify', { method:'POST', body:'{}' });
+        $('pushMsg').innerHTML = `<div class="banner ok">Maintenance: ${r.overdue} overdue, ${r.dueSoon} due soon. Notified: ${r.notified}</div>`;
+      } catch (e) { $('pushMsg').innerHTML = `<div class="banner err">${e.message}</div>`; }
+    });
+    $('btnBroadcast') && ($('btnBroadcast').onclick = async () => {
+      try {
+        const title = $('bcastTitle').value.trim();
+        const body = $('bcastBody').value.trim();
+        if (!title || !body) throw new Error('Title and body required');
+        const r = await api('/notifications/broadcast', { method:'POST', body: JSON.stringify({ title, body, roles:['driver'] }) });
+        $('bcastMsg').innerHTML = `<div class="banner ok">Broadcast queued to ${r.results?.length||0} user(s)</div>`;
+      } catch (e) { $('bcastMsg').innerHTML = `<div class="banner err">${e.message}</div>`; }
+    });
+
+    function mondayDate() {
+      const d=new Date(); const day=d.getDay(); const diff=d.getDate()-day+(day===0?-6:1);
+      d.setDate(diff); return d.toISOString().slice(0,10);
+    }
+
+    $('btnLogin').onclick=async()=>{
+      try{
+        localStorage.setItem('pr_mgr_api', apiBase());
+        const data=await api('/auth/login',{method:'POST',body:JSON.stringify({email:$('email').value.trim(),password:$('password').value})});
+        if(!['manager','admin','supervisor'].includes(data.user.role)) throw new Error('Manager/supervisor/admin role required');
+        state.token=data.accessToken; state.user=data.user;
+        localStorage.setItem('pr_mgr_token', state.token);
+        $('userLine').textContent=data.user.name+' · '+data.user.role;
+        $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden');
+        initMap(); setTimeout(()=>state.map.invalidateSize(),100);
+        $('weekStart').value=mondayDate();
+        await loadFleet();
+      }catch(e){ $('loginMsg').innerHTML=`<div class="banner err">${e.message}</div>`; }
+    };
+
+    $('btnLogout').onclick=()=>{ localStorage.removeItem('pr_mgr_token'); location.reload(); };
+    document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+    $('btnRefreshFleet').onclick=()=>loadFleet().catch(e=>alert(e.message));
+    $('btnRefreshPending').onclick=()=>loadPending().catch(e=>alert(e.message));
+    $('btnRefreshFlags').onclick=()=>loadFlags().catch(e=>alert(e.message));
+    $('btnRefreshAudit').onclick=()=>loadAudit().catch(e=>alert(e.message));
+    $('btnScanIntegrity').onclick=async()=>{
+      try{ const r=await api('/integrity/scan',{method:'POST',body:'{}'}); alert('Scan complete. New flags: '+(r.created?.length||0)); loadFlags(); }
+      catch(e){ alert(e.message); }
+    };
+    $('btnSimTrip').onclick=async()=>{
+      const id=state.selectedVehicleId||state.vehicles[0]?.id;
+      if(!id) return alert('Select a vehicle card first');
+      try{ const r=await api('/simulate/trip',{method:'POST',body:JSON.stringify({vehicleId:id,points:10})}); alert('Simulated '+r.pointsInserted+' points'); await loadFleet(); }
+      catch(e){ alert(e.message); }
+    };
+    $('btnPayrollPreview').onclick=async()=>{
+      try{
+        const w=$('weekStart').value; const d=await api('/payroll/preview?weekStart='+w);
+        const names=Object.keys(d.byDriver||{});
+        let html=`<p class="muted">Week ${d.weekStart} → ${d.weekEnd}</p>`;
+        if(!names.length) html+='<p class="muted">No approved work / drive hours yet.</p>';
+        else{
+          html+='<table><tr><th>Employee</th><th>Work</th><th>Drive</th><th>Total</th></tr>';
+          names.sort().forEach(n=>{ const r=d.byDriver[n]; html+=`<tr><td>${n}</td><td>${r.workHours.toFixed(2)}</td><td>${r.driveHours.toFixed(2)}</td><td>${(r.workHours+r.driveHours).toFixed(2)}</td></tr>`; });
+          html+='</table>';
+        }
+        $('payrollOut').innerHTML=html;
+      }catch(e){ $('payrollOut').innerHTML=`<div class="banner err">${e.message}</div>`; }
+    };
+    $('btnPayrollExport').onclick=async()=>{
+      try{
+        const w=$('weekStart').value;
+        const d=await api('/payroll/export',{method:'POST',body:JSON.stringify({weekStart:w})});
+        const blob=new Blob([d.csv],{type:'text/csv'}); const a=document.createElement('a');
+        a.href=URL.createObjectURL(blob); a.download=d.filename; a.click();
+        $('payrollOut').innerHTML=`<div class="banner ok">Exported ${d.filename}</div>`;
+      }catch(e){ alert(e.message); }
+    };
+
+    if(localStorage.getItem('pr_mgr_api')) $('apiBase').value=localStorage.getItem('pr_mgr_api');
+    if(state.token){
+      api('/auth/me').then(d=>{ state.user=d.user; $('userLine').textContent=d.user.name+' · '+d.user.role;
+        $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden');
+        initMap(); $('weekStart').value=mondayDate(); return loadFleet();
+      }).catch(()=>localStorage.removeItem('pr_mgr_token'));
+    }
+  </script>
+</body>
+</html>

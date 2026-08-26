@@ -1,0 +1,8 @@
+{
+  "name": "precision-rail-monorepo",
+  "private": true,
+  "description": "Do not deploy this root. Set Railway Root Directory to backend, driver-pwa, or manager-web.",
+  "scripts": {
+    "start": "echo 'ERROR: Set Railway Root Directory to backend (API), driver-pwa, or manager-web' && exit 1"
+  }
+}
