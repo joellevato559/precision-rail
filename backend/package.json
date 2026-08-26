@@ -6,8 +6,7 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js",
-    "db:apply": "psql \"$DATABASE_URL\" -f ../db/schema.sql"
+    ,"start": "npm install --omit=dev && node src/index.js",    "db:apply": "psql \"$DATABASE_URL\" -f ../db/schema.sql"
   },
   "engines": {
     "node": ">=20"
