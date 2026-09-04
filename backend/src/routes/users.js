@@ -253,35 +253,40 @@ router.delete('/:id', authRequired, requireRoles('manager', 'admin'), async (req
     const driverId = found.rows[0].driver_id;
     const companyId = req.user.companyId;
 
-    await withTransaction(async (client) => {
-      const q = (sql, params) => client.query(sql, params);
-
-      await q(`UPDATE work_sessions SET approved_by = NULL WHERE approved_by = $1 AND company_id = $2`, [userId, companyId]);
-      await q(`UPDATE defects SET resolved_by = NULL WHERE resolved_by = $1 AND company_id = $2`, [userId, companyId]);
-      await q(`UPDATE pay_periods SET exported_by = NULL WHERE exported_by = $1 AND company_id = $2`, [userId, companyId]);
-      await q(`UPDATE maintenance_logs SET performed_by = NULL WHERE performed_by = $1 AND company_id = $2`, [userId, companyId]);
-
-      if (driverId) {
-        await q(`DELETE FROM pay_period_lines WHERE driver_id = $1`, [driverId]);
-        await q(`DELETE FROM work_sessions WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
-        await q(`DELETE FROM drive_segments WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
-        await q(`DELETE FROM duty_status_events WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
-        await q(`DELETE FROM inspections WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
-        await q(`DELETE FROM expenses WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
-        await q(`DELETE FROM drivers WHERE id = $1 AND company_id = $2`, [driverId, companyId]);
+    const ignoreMissing = async (fn) => {
+      try { await fn(); } catch (e) {
+        if (e.code !== '42P01') throw e;
       }
+    };
 
-      try {
-        await q(`DELETE FROM password_reset_tokens WHERE user_id = $1`, [userId]);
-      } catch (e) { /* table may not exist */ }
+    await ignoreMissing(() => query(`DELETE FROM password_reset_tokens WHERE user_id = $1`, [userId]));
+    await ignoreMissing(() => query(`DELETE FROM refresh_tokens WHERE user_id = $1`, [userId]));
+    await ignoreMissing(() => query(`DELETE FROM device_tokens WHERE user_id = $1`, [userId]));
+    await ignoreMissing(() => query(`UPDATE notification_log SET user_id = NULL WHERE user_id = $1`, [userId]));
 
-      await q(`DELETE FROM users WHERE id = $1 AND company_id = $2`, [userId, companyId]);
-    });
+    await query(`UPDATE work_sessions SET approved_by = NULL WHERE approved_by = $1 AND company_id = $2`, [userId, companyId]);
+    await query(`UPDATE defects SET resolved_by = NULL WHERE resolved_by = $1 AND company_id = $2`, [userId, companyId]);
+    await query(`UPDATE pay_periods SET exported_by = NULL WHERE exported_by = $1 AND company_id = $2`, [userId, companyId]);
+    await query(`UPDATE maintenance_logs SET performed_by = NULL WHERE performed_by = $1 AND company_id = $2`, [userId, companyId]);
+
+    if (driverId) {
+      await query(`DELETE FROM pay_period_lines WHERE driver_id = $1`, [driverId]);
+      await query(`DELETE FROM work_sessions WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
+      await query(`DELETE FROM drive_segments WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
+      await query(`DELETE FROM duty_status_events WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
+      await query(`DELETE FROM inspections WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
+      await query(`DELETE FROM expenses WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
+      await query(`DELETE FROM drivers WHERE id = $1 AND company_id = $2`, [driverId, companyId]);
+    }
+
+    await query(`DELETE FROM users WHERE id = $1 AND company_id = $2`, [userId, companyId]);
 
     res.json({ ok: true, removed: true, email: found.rows[0].email });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to delete user' } });
+    res.status(500).json({
+      error: { code: 'SERVER_ERROR', message: err.message || 'Failed to delete user' }
+    });
   }
 });
 
