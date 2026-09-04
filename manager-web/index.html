@@ -725,6 +725,33 @@
         initMap(); $('weekStart').value=mondayDate(); return loadFleet();
       }).catch(()=>localStorage.removeItem('pr_mgr_token'));
     }
-  </script>
+      document.getElementById('btnCreateUser').onclick = async function () {
+      alert('Create clicked');
+      var name = document.getElementById('newUserName').value.trim();
+      var email = document.getElementById('newUserEmail').value.trim();
+      var password = document.getElementById('newUserPass').value;
+      var role = document.getElementById('newUserRole').value || 'driver';
+      if (!name || !email || !password) { alert('Fill name, email, and password'); return; }
+      if (password.length < 8) { alert('Password must be at least 8 characters'); return; }
+      try {
+        var r = await api('/users', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: name,
+            email: email,
+            password: password,
+            role: role,
+            employeeCode: document.getElementById('newUserEmp').value.trim() || undefined,
+            workRate: Number(document.getElementById('newUserWorkRate').value) || 25,
+            driveRate: Number(document.getElementById('newUserDriveRate').value) || 30
+          })
+        });
+        var u = r.user || r;
+        alert('Created ' + (u.email || email));
+        loadUsers();
+      } catch (e) {
+        alert(e.message || 'Create failed');
+      }
+    };  </script>
 </body>
 </html>
