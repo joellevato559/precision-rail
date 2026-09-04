@@ -229,7 +229,7 @@ router.patch('/:id', authRequired, requireRoles('manager', 'admin'), async (req,
   }
 });
 
-/** Remove a user. If they have time records, disable instead. */
+/** Remove a user and their time / drive records. */
 router.delete('/:id', authRequired, requireRoles('manager', 'admin'), async (req, res) => {
   try {
     if (String(req.params.id) === String(req.user.sub)) {
@@ -237,38 +237,48 @@ router.delete('/:id', authRequired, requireRoles('manager', 'admin'), async (req
         error: { code: 'CANNOT_DELETE_SELF', message: 'You cannot delete your own login' }
       });
     }
+
     const found = await query(
-      `SELECT id, email FROM users WHERE id = $1 AND company_id = $2`,
+      `SELECT u.id, u.email, d.id AS driver_id
+       FROM users u
+       LEFT JOIN drivers d ON d.user_id = u.id
+       WHERE u.id = $1 AND u.company_id = $2`,
       [req.params.id, req.user.companyId]
     );
     if (!found.rows[0]) {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
     }
-    try {
-      await query(`DELETE FROM drivers WHERE user_id = $1 AND company_id = $2`, [
-        req.params.id,
-        req.user.companyId
-      ]);
-      await query(`DELETE FROM users WHERE id = $1 AND company_id = $2`, [
-        req.params.id,
-        req.user.companyId
-      ]);
-      return res.json({ ok: true, removed: true });
-    } catch (err) {
-      if (err.code === '23503') {
-        await query(
-          `UPDATE users SET active = false, updated_at = now() WHERE id = $1 AND company_id = $2`,
-          [req.params.id, req.user.companyId]
-        );
-        return res.json({
-          ok: true,
-          removed: false,
-          disabled: true,
-          message: 'This person has time or drive records, so the login was disabled instead of deleted.'
-        });
+
+    const userId = found.rows[0].id;
+    const driverId = found.rows[0].driver_id;
+    const companyId = req.user.companyId;
+
+    await withTransaction(async (client) => {
+      const q = (sql, params) => client.query(sql, params);
+
+      await q(`UPDATE work_sessions SET approved_by = NULL WHERE approved_by = $1 AND company_id = $2`, [userId, companyId]);
+      await q(`UPDATE defects SET resolved_by = NULL WHERE resolved_by = $1 AND company_id = $2`, [userId, companyId]);
+      await q(`UPDATE pay_periods SET exported_by = NULL WHERE exported_by = $1 AND company_id = $2`, [userId, companyId]);
+      await q(`UPDATE maintenance_logs SET performed_by = NULL WHERE performed_by = $1 AND company_id = $2`, [userId, companyId]);
+
+      if (driverId) {
+        await q(`DELETE FROM pay_period_lines WHERE driver_id = $1`, [driverId]);
+        await q(`DELETE FROM work_sessions WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
+        await q(`DELETE FROM drive_segments WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
+        await q(`DELETE FROM duty_status_events WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
+        await q(`DELETE FROM inspections WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
+        await q(`DELETE FROM expenses WHERE driver_id = $1 AND company_id = $2`, [driverId, companyId]);
+        await q(`DELETE FROM drivers WHERE id = $1 AND company_id = $2`, [driverId, companyId]);
       }
-      throw err;
-    }
+
+      try {
+        await q(`DELETE FROM password_reset_tokens WHERE user_id = $1`, [userId]);
+      } catch (e) { /* table may not exist */ }
+
+      await q(`DELETE FROM users WHERE id = $1 AND company_id = $2`, [userId, companyId]);
+    });
+
+    res.json({ ok: true, removed: true, email: found.rows[0].email });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to delete user' } });
