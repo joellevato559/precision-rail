@@ -48,31 +48,45 @@
     }
 
     if($('btnRefreshUsers')) $('btnRefreshUsers').onclick = () => loadUsers();
-    if($('btnCreateUser')) $('btnCreateUser').onclick = async () => {
-            alert('Create clicked');
+        if ($('btnCreateUser')) $('btnCreateUser').onclick = async () => {
+      alert('Create clicked');
       const msg = $('usersMsg');
-      msg.innerHTML = '';
       try {
-        const body = {
-          name: $('newUserName').value.trim(),
-          email: $('newUserEmail').value.trim(),
-          password: $('newUserPass').value,
-          role: $('newUserRole').value,
-          employeeCode: $('newUserEmp').value.trim() || undefined,
-          licenseNumber: ($('newUserLicense') && $('newUserLicense').value.trim()) || undefined,
-          licenseState: ($('newUserLicState') && $('newUserLicState').value.trim()) || undefined,
-          workRate: Number($('newUserWorkRate').value)||25,
-          driveRate: Number($('newUserDriveRate').value)||30
-        };
-        const r = await api('/users', { method:'POST', body: JSON.stringify(body) });
-        msg.innerHTML = `<div class="banner ok">Created ${r.user.name} — ${r.user.email} (${r.user.role}). ${r.user.role==='driver' ? 'They can sign in on the Driver app.' : 'They can sign in on the Manager app.'}</div>`;
-        $('newUserName').value=''; $('newUserEmail').value=''; $('newUserPass').value='';
-        loadUsers();
-      } catch(e){
-        msg.innerHTML = `<div class="banner err">${e.message}</div>`;
+        const name = ($('newUserName').value || '').trim();
+        const email = ($('newUserEmail').value || '').trim();
+        const password = $('newUserPass').value || '';
+        const role = $('newUserRole').value || 'driver';
+        if (!name || !email || !password) {
+          alert('Fill name, email, and password');
+          return;
+        }
+        if (password.length < 8) {
+          alert('Password must be at least 8 characters');
+          return;
+        }
+        const r = await api('/users', {
+          method: 'POST',
+          body: JSON.stringify({
+            name, email, password, role,
+            employeeCode: ($('newUserEmp').value || '').trim() || undefined,
+            licenseNumber: ($('newUserLicense') && $('newUserLicense').value.trim()) || undefined,
+            licenseState: ($('newUserLicState') && $('newUserLicState').value.trim()) || undefined,
+            workRate: Number($('newUserWorkRate').value) || 25,
+            driveRate: Number($('newUserDriveRate').value) || 30
+          })
+        });
+        const u = r.user || r;
+        alert('Created ' + (u.email || email));
+        if (msg) msg.innerHTML = '<div class="banner ok">Created ' + (u.name || name) + ' — they can sign in now.</div>';
+        $('newUserName').value = '';
+        $('newUserEmail').value = '';
+        $('newUserPass').value = '';
+        if (typeof loadUsers === 'function') loadUsers();
+      } catch (e) {
+        alert(e.message || 'Create failed');
+        if (msg) msg.innerHTML = '<div class="banner err">' + (e.message || 'Create failed') + '</div>';
       }
     };
-
     // Hook tab switch to load users
     document.querySelectorAll('#tabs button').forEach(b => {
       b.addEventListener('click', () => {
