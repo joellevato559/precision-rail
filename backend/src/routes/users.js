@@ -149,10 +149,10 @@ router.post('/:id/password', authRequired, requireRoles('manager', 'admin'), asy
   }
 });
 
-/** Activate / deactivate */
+/** Update name, role, active, and pay rates */
 router.patch('/:id', authRequired, requireRoles('manager', 'admin'), async (req, res) => {
   try {
-    const { active, name, role } = req.body || {};
+    const { active, name, role, workRate, driveRate, employeeCode } = req.body || {};
     const sets = [];
     const params = [];
     let i = 1;
@@ -168,24 +168,110 @@ router.patch('/:id', authRequired, requireRoles('manager', 'admin'), async (req,
       sets.push(`role = $${i++}`);
       params.push(role);
     }
-    if (!sets.length) {
-      return res.status(400).json({ error: { code: 'INVALID_BODY', message: 'Nothing to update' } });
+    if (sets.length) {
+      sets.push('updated_at = now()');
+      params.push(req.params.id, req.user.companyId);
+      const { rows } = await query(
+        `UPDATE users SET ${sets.join(', ')}
+         WHERE id = $${i++} AND company_id = $${i}
+         RETURNING id, email, name, role, active`,
+        params
+      );
+      if (!rows[0]) {
+        return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+      }
+    } else {
+      const { rows } = await query(
+        `SELECT id, email, name, role, active FROM users WHERE id = $1 AND company_id = $2`,
+        [req.params.id, req.user.companyId]
+      );
+      if (!rows[0]) {
+        return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+      }
     }
-    sets.push('updated_at = now()');
-    params.push(req.params.id, req.user.companyId);
+
+    const driverSets = [];
+    const driverParams = [];
+    let d = 1;
+    if (workRate != null && workRate !== '') {
+      driverSets.push(`work_rate_hourly = $${d++}`);
+      driverParams.push(Number(workRate));
+    }
+    if (driveRate != null && driveRate !== '') {
+      driverSets.push(`drive_rate_hourly = $${d++}`);
+      driverParams.push(Number(driveRate));
+    }
+    if (employeeCode != null) {
+      driverSets.push(`employee_code = $${d++}`);
+      driverParams.push(String(employeeCode).trim() || null);
+    }
+    if (driverSets.length) {
+      driverParams.push(req.params.id, req.user.companyId);
+      await query(
+        `UPDATE drivers SET ${driverSets.join(', ')}
+         WHERE user_id = $${d++} AND company_id = $${d}`,
+        driverParams
+      );
+    }
+
     const { rows } = await query(
-      `UPDATE users SET ${sets.join(', ')}
-       WHERE id = $${i++} AND company_id = $${i}
-       RETURNING id, email, name, role, active`,
-      params
+      `SELECT u.id, u.email, u.name, u.role, u.active,
+              d.employee_code, d.work_rate_hourly, d.drive_rate_hourly
+       FROM users u
+       LEFT JOIN drivers d ON d.user_id = u.id
+       WHERE u.id = $1 AND u.company_id = $2`,
+      [req.params.id, req.user.companyId]
     );
-    if (!rows[0]) {
-      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
-    }
     res.json({ user: rows[0] });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to update user' } });
+  }
+});
+
+/** Remove a user. If they have time records, disable instead. */
+router.delete('/:id', authRequired, requireRoles('manager', 'admin'), async (req, res) => {
+  try {
+    if (String(req.params.id) === String(req.user.sub)) {
+      return res.status(400).json({
+        error: { code: 'CANNOT_DELETE_SELF', message: 'You cannot delete your own login' }
+      });
+    }
+    const found = await query(
+      `SELECT id, email FROM users WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.companyId]
+    );
+    if (!found.rows[0]) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+    }
+    try {
+      await query(`DELETE FROM drivers WHERE user_id = $1 AND company_id = $2`, [
+        req.params.id,
+        req.user.companyId
+      ]);
+      await query(`DELETE FROM users WHERE id = $1 AND company_id = $2`, [
+        req.params.id,
+        req.user.companyId
+      ]);
+      return res.json({ ok: true, removed: true });
+    } catch (err) {
+      if (err.code === '23503') {
+        await query(
+          `UPDATE users SET active = false, updated_at = now() WHERE id = $1 AND company_id = $2`,
+          [req.params.id, req.user.companyId]
+        );
+        return res.json({
+          ok: true,
+          removed: false,
+          disabled: true,
+          message: 'This person has time or drive records, so the login was disabled instead of deleted.'
+        });
+      }
+      throw err;
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to delete user' } });
   }
 });
 
