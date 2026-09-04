@@ -49,6 +49,7 @@
 
     if($('btnRefreshUsers')) $('btnRefreshUsers').onclick = () => loadUsers();
     if($('btnCreateUser')) $('btnCreateUser').onclick = async () => {
+            alert('Create clicked');
       const msg = $('usersMsg');
       msg.innerHTML = '';
       try {
