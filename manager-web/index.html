@@ -15,14 +15,20 @@
         const data = await api('/users');
         const rows = data.users || [];
         if(!rows.length){ box.innerHTML = '<div class="muted">No users yet.</div>'; return; }
-        box.innerHTML = `<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Active</th><th></th></tr></thead><tbody>` +
+        box.innerHTML = `<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Work</th><th>Drive</th><th>Active</th><th></th></tr></thead><tbody>` +
           rows.map(u => `<tr>
             <td>${u.name||''}</td>
             <td>${u.email||''}</td>
             <td>${u.role||''}</td>
+            <td>${u.work_rate_hourly!=null?u.work_rate_hourly:''}</td>
+            <td>${u.drive_rate_hourly!=null?u.drive_rate_hourly:''}</td>
             <td>${u.active ? 'Yes' : 'No'}</td>
-            <td><button class="ghost btn-reset-pw" data-id="${u.id}">Reset PW</button>
-                <button class="ghost btn-toggle-active" data-id="${u.id}" data-active="${u.active}">${u.active?'Disable':'Enable'}</button></td>
+            <td>
+              <button class="ghost btn-edit-user" data-id="${u.id}" data-name="${(u.name||'').replace(/"/g,'"')}" data-role="${u.role||''}" data-work="${u.work_rate_hourly||''}" data-drive="${u.drive_rate_hourly||''}" data-emp="${u.employee_code||''}">Edit</button>
+              <button class="ghost btn-reset-pw" data-id="${u.id}">Reset PW</button>
+              <button class="ghost btn-toggle-active" data-id="${u.id}" data-active="${u.active}">${u.active?'Disable':'Enable'}</button>
+              <button class="ghost btn-delete-user" data-id="${u.id}" data-name="${(u.name||u.email||'').replace(/"/g,'"')}">Remove</button>
+            </td>
           </tr>`).join('') + `</tbody></table>`;
         box.querySelectorAll('.btn-reset-pw').forEach(btn => {
           btn.onclick = async () => {
@@ -39,6 +45,44 @@
             const next = btn.dataset.active !== 'true';
             try {
               await api('/users/'+btn.dataset.id, { method:'PATCH', body: JSON.stringify({ active: next }) });
+              loadUsers();
+            } catch(e){ alert(e.message); }
+          };
+        });
+        box.querySelectorAll('.btn-edit-user').forEach(btn => {
+          btn.onclick = async () => {
+            const name = prompt('Full name', btn.dataset.name || '');
+            if (name == null) return;
+            const role = prompt('Role: driver or manager', btn.dataset.role || 'driver');
+            if (role == null) return;
+            const work = prompt('Work rate $ / hour', btn.dataset.work || '25');
+            if (work == null) return;
+            const drive = prompt('Drive rate $ / hour', btn.dataset.drive || '30');
+            if (drive == null) return;
+            const emp = prompt('Employee code', btn.dataset.emp || '');
+            if (emp == null) return;
+            try {
+              await api('/users/'+btn.dataset.id, {
+                method: 'PATCH',
+                body: JSON.stringify({
+                  name: name.trim(),
+                  role: role.trim(),
+                  workRate: work,
+                  driveRate: drive,
+                  employeeCode: emp
+                })
+              });
+              alert('Saved');
+              loadUsers();
+            } catch(e){ alert(e.message); }
+          };
+        });
+        box.querySelectorAll('.btn-delete-user').forEach(btn => {
+          btn.onclick = async () => {
+            if (!confirm('Remove ' + (btn.dataset.name || 'this person') + '? If they have time records they will be disabled instead.')) return;
+            try {
+              const r = await api('/users/'+btn.dataset.id, { method: 'DELETE' });
+              alert(r.message || (r.removed ? 'Removed' : 'Updated'));
               loadUsers();
             } catch(e){ alert(e.message); }
           };
