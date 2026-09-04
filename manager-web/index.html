@@ -397,8 +397,7 @@
 <script>
     const state = { token: localStorage.getItem('pr_mgr_token')||'', map:null, markers:{}, vehicles:[], selectedVehicleId:null, user:null };
     const $ = id => document.getElementById(id);
-    const apiBase = () => ($('apiBase').value||'http://localhost:8080/api/v1').replace(/\/$/,'');
-
+   const apiBase = () => 'https://api.precisionrailgroup.com/api/v1';
     async function api(path, opts={}) {
       const headers = { 'Content-Type':'application/json', ...(opts.headers||{}) };
       if (state.token) headers.Authorization = 'Bearer ' + state.token;
