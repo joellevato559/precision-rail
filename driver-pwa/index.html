@@ -211,8 +211,7 @@
 
   <script>
     const ITEMS = ['Brakes','Lights / Reflectors','Tires / Wheels','Steering','Horn','Windshield / Wipers','Mirrors','Coupling Devices','Fluid Levels','Emergency Equipment'];
-    const state = { token: localStorage.getItem('pr_token') || '', user: null, today: null, timer: null };
-
+    const state = { token: localStorage.getItem('pr_token') || '', user: null, today: null, timer: null, fuelReceipt: null };
     const $ = (id) => document.getElementById(id);
    const apiBase = () => 'https://api.precisionrailgroup.com/api/v1';
     async function api(path, opts = {}) {
