@@ -440,6 +440,71 @@
 
     $('btnGoFuel').onclick = () => show('fuel');
     $('btnFuelBack').onclick = () => show('home');
+    |    function compressReceipt(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Could not read photo'));
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            const max = 1280;
+            let w = img.width, h = img.height;
+            if (w > max || h > max) {
+              const scale = max / Math.max(w, h);
+              w = Math.round(w * scale);
+              h = Math.round(h * scale);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.72));
+          };
+          img.onerror = () => reject(new Error('Could not open photo'));
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+    function parseReceiptText(text) {
+      const raw = String(text || '');
+      const lines = raw.split(/\n+/).map(s => s.trim()).filter(Boolean);
+      const result = { vendor: '', amount: '', gallons: '' };
+      const skip = /^(thank|visa|mastercard|debit|credit|change|cash|auth|approval|invoice|tel|phone|www|http|date|time|pump|tran)/i;
+      for (const line of lines) {
+        if (line.length >= 3 && !skip.test(line) && !/\$/.test(line) && !/\d+\.\d{3}/.test(line)) {
+          result.vendor = line.replace(/[^A-Za-z0-9 &.'-]/g, ' ').replace(/\s+/g, ' ').trim();
+          break;
+        }
+      }
+      const galMatch = raw.match(/(\d+(?:\.\d{1,3})?)\s*(?:gal(?:lons?)?|gals)\b/i)
+        || raw.match(/\b(?:gal(?:lons?)?|gals)\s*[:=]?\s*(\d+(?:\.\d{1,3})?)/i);
+      if (galMatch) result.gallons = galMatch[1];
+      const money = [];
+      const moneyRe = /\$?\s*(\d{1,4}\.\d{2})\b/g;
+      let m;
+      while ((m = moneyRe.exec(raw)) !== null) {
+        const n = parseFloat(m[1]);
+        if (n >= 5 && n <= 1500) money.push(n);
+      }
+      if (money.length) result.amount = String(Math.max.apply(null, money).toFixed(2));
+      return result;
+    }
+    $('fuelReceipt').onchange = async () => {
+      const file = $('fuelReceipt').files && $('fuelReceipt').files[0];
+      if (!file) return;
+      try {
+        $('fuelScanMsg').textContent = 'Reading receipt…';
+        state.fuelReceipt = await compressReceipt(file);
+        $('fuelPreview').src = state.fuelReceipt;
+        $('fuelPreview').style.display = 'block';
+        const parsed = await Tesseract.recognize(state.fuelReceipt, 'eng');
+        const got = parseReceiptText(parsed.data.text);
+        if (got.vendor) $('fuelVendor').value = got.vendor;
+        if (got.amount) $('fuelAmount').value = got.amount;
+        if (got.gallons) $('fuelQty').value = got.gallons;
+        $('fuelScanMsg').textContent = 'Check the numbers, then save.';
+      } catch (e) { $('fuelScanMsg').textContent = e.message; }
+    };
     $('btnSaveFuel').onclick = async () => {
       try {
         const amount = parseFloat($('fuelAmount').value);
@@ -452,6 +517,15 @@
             amount,
             quantity: $('fuelQty').value ? parseFloat($('fuelQty').value) : null,
             vendor: $('fuelVendor').value.trim() || null,
+            paymentMethod: $('fuelPay').value,
+            jurisdiction: $('fuelJuris').value,
+            receiptUrl: state.fuelReceipt || null
+          })
+        });
+        alert('Fuel and receipt saved');
+        show('home');
+      } catch (e) { alert(e.message); }
+    }; null,
             paymentMethod: $('fuelPay').value,
             jurisdiction: $('fuelJuris').value
           })
