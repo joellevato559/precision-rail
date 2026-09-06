@@ -193,6 +193,11 @@
         <select id="fuelJuris">
           <option>TX</option><option>OK</option><option>NM</option><option>LA</option><option>AR</option><option>OTHER</option>
         </select>
+                <label>Receipt photo</label>
+        <input id="fuelReceipt" type="file" accept="image/*" capture="environment" />
+        <p class="muted" style="font-size:.8rem;">Take a picture of the pump receipt. The app reads the total and gallons, then you confirm and save.</p>
+        <div id="fuelScanMsg" class="muted"></div>
+        <img id="fuelPreview" alt="" style="display:none;max-width:100%;border-radius:8px;margin:8px 0;" />
         <button class="btn btn-primary" id="btnSaveFuel">Save Fuel Purchase</button>
         <button class="btn btn-ghost" id="btnFuelBack">Back</button>
       </div>
